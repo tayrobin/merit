@@ -5,12 +5,10 @@ setup(
   version = '0.3',
   license='MIT',
   description = 'A Python SDK for the Merit API.',
-  long_description = "file: README.md",
-  long_description_content_type = "text/markdown",
   author = 'Taylor Robinson',
   author_email = 'taylor.howard.robinson@gmail.com',
   url = 'https://github.com/tayrobin/merit',
-  download_url = 'https://github.com/tayrobin/merit/archive/refs/tags/0.2.tar.gz',
+  download_url = 'https://github.com/tayrobin/merit/archive/refs/tags/0.3.tar.gz',
   keywords = ['Merit', 'API', 'SDK', 'Digital Credentials'],
   install_requires=[
           'requests',
