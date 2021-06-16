@@ -219,10 +219,10 @@ class Org(Merit):
             params["merit_status"] = merit_status
         # TODO: allow user to provide a list of template_ids
         if template_id:
-            params:["merittemplate_id"] = template_id
+            params["merittemplate_id"] = template_id
         # TODO: allow user to provide a list of template_ids
         if email:
-            params:["recipient_email"] = email
+            params["recipient_email"] = email
 
         # init returned list
         merit_list = []
