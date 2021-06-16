@@ -1,15 +1,11 @@
-.. Merit documentation master file, created by
-   sphinx-quickstart on Sat Jun 12 18:47:17 2021.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome to Merit's documentation!
 =================================
 
 .. toctree::
    :maxdepth: 2
+   :caption: Contents:
 
-   source/modules
+   modules
 
 
 Getting Started
@@ -34,11 +30,6 @@ If you are testing or running on Sandbox, pass the ``production=False`` param:
 **Create an Org object with:**
 
 ``o = merit.Org(app_id, app_secret, org_id, production=False)``
-
-**Read all support methods here:**
-
-:py:mod:`merit`
-:py:mod:`org`
 
 
 Indices and tables

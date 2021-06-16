@@ -5,7 +5,7 @@ import requests
 
 
 from .merit import Merit
-
+from .exceptions import MeritStatusException
 
 # Get an instance of a logger
 logging.basicConfig(format='[Merit %(asctime)s %(levelname)s]: %(message)s')
@@ -110,17 +110,7 @@ class Org(Merit):
     def get_org_info(self) -> dict:
         """Get Merit information about Organization.
 
-        :return: ..code-block:: json
-        {
-            "id": "5b442b02b85f223fffe9e851",
-            "title": "Millbrae CERT",
-            "description": "This is an example Org",
-            "website": "http://www.example.com",
-            "address": "1001 Broadway, Millbrae, CA, USA",
-            "phone": "+1 650-296-9525",
-            "email": "admin@example.com",
-            "logoUrl": "https://images.sig.ma/5c4f598f774d570006465f9e?rect=0,0,150,150"
-        }
+        :return: {"id": "5b442b02b85f223fffe9e851","title": "Millbrae CERT","description": "This is an example Org","website": "http://www.example.com","address": "1001 Broadway, Millbrae, CA, USA","phone": "+1 650-296-9525","email": "admin@example.com","logoUrl": "https://images.sig.ma/5c4f598f774d570006465f9e?rect=0,0,150,150"}
         """
 
         response = self.get_api(f"/orgs/{self.org_id}")
@@ -201,34 +191,64 @@ class Org(Merit):
         return [self.get_field(field.get("fieldId")) for field in self.get_merit_template(template_id).get("enabledFieldSettings")]
 
 
-    def get_all_merits(self, template_id: str = None, merit_status: str = None) -> list:
+    def get_all_merits(self, template_id: str = None, merit_status: str = None, email: str = None, limit: int = 100) -> list:
         """Get all Org merits by specifications.
 
         :param template_id: the ID of the MeritTemplate you wish to retreive
+        :type template_id: str, optional
         :param merit_status: the status you wish to filter by
+        :type merit_status: str, optional
+        :param email: a member's email you wish to filter by
+        :type email: str, optional
+        :param limit: the number of results you wish to retreive
+        :type limit: int, optional
 
-        :return: a `list` of merits issued by the Org, from MeritTemplate `template_id`, with status `merit_status`
+        :return: a list of merits issued by the Org, filtered as specified
+        :rtype: list
         """
 
         # valid merit_status values are:
         valid_statuses = ["Accepted", "Forfeited", "Pending", "Rejected", "Reported", "Revoked", "Transferred", "TransferredUnverified", "Unapproved", "UnapprovedUnverified", "Unverified"]
 
-        if not merit_status in valid_statuses:
-            raise Error(f"Merit Status ({merit_status}) is not valid.  Valid statuses are: ({valid_statuses})")
+        # TODO: allow user to provide a list of statuses
+        if merit_status and merit_status not in valid_statuses:
+            raise MeritStatusException(f"Merit Status ({merit_status}) is not valid.  Valid statuses are: ({valid_statuses})")
 
-        params = {
-            "merittemplate_id": template_id,
-            "merit_status": merit_status,
-            "limit": 100,
-        }
+        params = {"limit": limit,}
+        if merit_status:
+            params["merit_status"] = merit_status
+        # TODO: allow user to provide a list of template_ids
+        if template_id:
+            params:["merittemplate_id"] = template_id
+        # TODO: allow user to provide a list of template_ids
+        if email:
+            params:["recipient_email"] = email
 
-        response = self.get_api(f"/orgs/{self.org_id}/merits", params)
+        # init returned list
+        merit_list = []
+        next_page = True
+        while next_page:
 
-        if response.status_code == 200:
-            return response.json()
-        else:
-            logger.error(response.text)
-            return []
+            # call api, parse response
+            response = self.get_api(f"/orgs/{self.org_id}/merits", params)
+            if response.status_code == 200:
+                data = response.json()
+            else:
+                logger.error(response.text)
+                return merit_list
+
+            # add merits into list
+            merit_list.extend(data.get("merits", []))
+
+            # stop at user provided limit
+            if len(merit_list) >= limit:
+                return merit_list
+
+            # loop again if more pages
+            next_page = data.get("pageInfo", {}).get("hasNextPage", False)
+            params["starting_after"] = data.get("paging", {}).get("cursors", {}).get("after", "")
+
+        return merit_list
 
 
     def get_template_pending_merits(self, template_id: str) -> list:

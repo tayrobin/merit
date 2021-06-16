@@ -1,4 +1,4 @@
-Merit
+merit
 =====
 
 .. toctree::
@@ -6,3 +6,4 @@ Merit
 
    merit
    org
+   exceptions
