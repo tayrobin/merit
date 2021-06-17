@@ -5,7 +5,7 @@ import requests
 
 
 from .merit import Merit
-from .exceptions import MeritStatusException
+from .exceptions import MeritStatusException, SearchQueryException
 
 # Get an instance of a logger
 logging.basicConfig(format='[Merit %(asctime)s %(levelname)s]: %(message)s')
@@ -123,6 +123,29 @@ class Org(Merit):
         return None
 
 
+    def search_orgs(self, query: str) -> list:
+        """Search for Organization by name based on provided query.
+
+        :param query: the name you wish to search for
+        :type query: str
+
+        :return: a `list` of `dicts` of all Organizations with a matching name.
+        :rtype: list
+        """
+
+        if len(query) < 3:
+            raise SearchQueryException("Search query must be longer than 3 characters.")
+
+        response = self.get_api("/orgs/search", {"limit": 10, "search_string": query})
+
+        if response.status_code == 200:
+            data = response.json()
+            if "results" in data:
+                return data.get("results")
+        logger.error(response.text)
+        return []
+
+
     def get_field(self, field_id: str) -> dict:
         """Return details of specified Field.
 
@@ -140,10 +163,13 @@ class Org(Merit):
             return None
 
 
-    def get_all_org_merit_templates(self, limit: int = 100) -> list:
+    def get_all_org_merit_templates(self, limit: int = 100, org_id: str = None) -> list:
         """Return a list of all MeritTemplates owned by the Org."""
 
-        response = self.get_api(f"/orgs/{self.org_id}/merittemplates?limit={limit}")
+        if not org_id:
+            org_id = self.org_id
+
+        response = self.get_api(f"/orgs/{org_id}/merittemplates?limit={limit}")
 
         if response.status_code == 200:
             return response.json().get("merittemplates")
