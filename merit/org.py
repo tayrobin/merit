@@ -1,11 +1,12 @@
+import os
 import logging
 import datetime
 
 import requests
 
-
 from .merit import Merit
-from .exceptions import MeritStatusException, SearchQueryException
+from . import exceptions
+
 
 # Get an instance of a logger
 logging.basicConfig(format='[Merit %(asctime)s %(levelname)s]: %(message)s')
@@ -26,8 +27,16 @@ class Org(Merit):
     """
 
 
-    def __init__(self, app_id: str, app_secret: str, org_id: str, production: bool = True):
-        super(Org, self).__init__(app_id, app_secret, production=production)
+    def __init__(self,
+        org_id: str = os.getenv("MERIT_ORG_ID"),
+        app_id: str = None,
+        app_secret: str = None,
+        production: bool = True
+    ):
+        if app_id and app_secret:
+            super(Org, self).__init__(app_id, app_secret, production)
+        else:
+            super(Org, self).__init__()
         self.org_id = org_id
         self.auth_timeout = 3600 # seconds
         self.authenticated_at = None
@@ -107,6 +116,125 @@ class Org(Merit):
             return response
 
 
+    def login_with_merit(self, success_url: str, failure_url: str, permissions: list = ["CanViewPublicProfile"], org_ids: list = None) -> str:
+        """Initiate process to Login with Merit for a member.
+
+        :param success_url: relative path where Merit will redirect the user after successful authentication
+        :param failure_url: relative path where Merit will redirect the user after unsuccessful authentication
+        :param permissions: a list of permissions you wish to request from the member
+        :param org_ids: a list of org_ids for which you wish to request permission from the member.  Must be included if `CanViewAllStandardMeritsFromOrg` is included in `permissions`.
+
+        :return: URL to redirect user to to begin link_with_merit flow (https://app.merits.com/link-app/?token=5aa5a3992bfa4e0006c47cdf)
+        """
+
+        path = f"/orgs/{self.org_id}/request_loginwithmerit_url"
+
+        # validate params
+        valid_permissions = ["CanViewPublicProfile", "CanViewAllStandardMeritsFromOrg", "CanViewAllStandardMerits"]
+        requested_permissions = []
+        if type(permissions) != list:
+            raise TypeError("Permission variable must be a list of strings.")
+        for permission in permissions:
+            if type(permission) != str:
+                raise TypeError("Permission variable must be a list of strings.")
+            if permission not in valid_permissions:
+                raise exceptions.RequestedPermissionException(f"Requested Permissions ({permissions}) is not valid.  Valid Permissions are: ({valid_permissions})")
+            # add to list
+            requested_permissions.append({"permissionType": permission})
+
+        # org_ids do not get validated
+        if "CanViewAllStandardMeritsFromOrg" in permissions:
+            if not org_ids:
+                raise exceptions.RequestedPermissionException("Permission CanViewAllStandardMeritsFromOrg requested without specifiying org_ids.")
+            if type(org_ids) != list:
+                raise TypeError("org_ids variable must be a list of strings.")
+            for org_id in org_ids:
+                if type(org_id) != str:
+                    raise TypeError("org_ids variable must be a list of strings.")
+                # add to list
+                requested_permissions.append({"permissionType": "CanViewAllStandardMeritsFromOrg", "orgId": org_id })
+
+        data = {
+            "requestedPermissions": requested_permissions,
+            "successUrl": success_url,
+            "failureUrl": failure_url,
+            "state": f"<3-from-merit-{datetime.datetime.now():%d-%m-%Y-%H-%M-%S}",
+        }
+
+        response = self.post_api(path, data=data)
+
+        # {
+        #   "request_loginwithmerit_url": "https://sig.ma/login-with-merit/?token=5aa5a3992bfa4e0006c47cdf"
+        #   "expiration": "2019-01-31T18:48:51.000Z",
+        #   "state": "initiated-from-merit-registration-%d-%m-%Y-%H-%M-%S"
+        # }
+
+        if response.status_code == 200:
+            url = response.json().get("request_loginwithmerit_url")
+            if url:
+                return url
+        logger.error(response.text)
+        return None
+
+
+    def get_member_id_from_token(self, member_id_token: str) -> str:
+        """Exchange member_id_token from login_with_merit for permanent member_id.
+
+        :param member_id_token: the token to exchange
+
+        :return: member_id
+        """
+
+        # validate member_id_token
+        if type(member_id_token) != str:
+            raise TypeError(f"member_id_token {member_id_token} is not a string.")
+
+        response = self.get_api("/member_id", {"member_id_token": member_id_token})
+
+        if response.status_code == 200:
+            data = response.json()
+            print(data)
+            if "memberId" in data:
+                return data.get("memberId")
+        logger.error(response.text)
+        return None
+
+
+    def get_member_info(self, member_id: str) -> dict:
+        """Get Merit information about Member.
+
+        :param member_id: the ID of the Member you wish to retreive
+
+        :return: {"id": "573564e698ae3b96668fd517","name": {"firstName": "Omer","lastName":"Zach"}}
+        """
+
+        response = self.get_api(f"/members/{member_id}")
+
+        if response.status_code == 200:
+            data = response.json()
+            if "id" in data:
+                return data
+        logger.error(response.text)
+        return None
+
+
+    def get_member_access_merit(self, member_id: str) -> dict:
+        """Get Member's Access merit for this app, which returns more details than `get_member_info`
+
+        :param member_id: the ID of the Member you wish to retreive
+
+        :return: a `Merit` dict
+        """
+
+        response = self.get_api(f"/members/{member_id}/access_merit")
+
+        if response.status_code == 200:
+            data = response.json()
+            if "id" in data:
+                return data
+        logger.error(response.text)
+        return None
+
     def get_org_info(self) -> dict:
         """Get Merit information about Organization.
 
@@ -134,7 +262,7 @@ class Org(Merit):
         """
 
         if len(query) < 3:
-            raise SearchQueryException("Search query must be longer than 3 characters.")
+            raise exceptions.SearchQueryException("Search query must be longer than 3 characters.")
 
         response = self.get_api("/orgs/search", {"limit": 10, "search_string": query})
 
@@ -182,11 +310,11 @@ class Org(Merit):
         """Return a formatted tuple of form choices of available MeritTemplates."""
 
         choices = []
-        if include_none:
-            choices.append((None, "-----"))
         for template in self.get_all_org_merit_templates():
             choices.append((template.get("id"), template.get("title")))
-        return choices
+        choices = sorted(choices, key = lambda x: x[1])
+        if include_none:
+            choices.insert(0, (None, "-----"))
 
 
     def get_merit_template(self, template_id: str) -> dict:
@@ -217,6 +345,22 @@ class Org(Merit):
         return [self.get_field(field.get("fieldId")) for field in self.get_merit_template(template_id).get("enabledFieldSettings")]
 
 
+    def get_merit(self, merit_id: str) -> dict:
+        """Return details of specified Merit.
+
+        :param merit_id: the ID of the Merit you wish to retreive
+
+        :return: all details about that Merit
+        """
+
+        response = self.get_api(f"/orgs/{self.org_id}/merits/{merit_id}")
+
+        if response.status_code == 200:
+            return response.json()
+        logger.error(response.text)
+        return None
+
+
     def get_all_merits(self, template_id: str = None, merit_status: str = None, email: str = None, limit: int = 100) -> list:
         """Get all Org merits by specifications.
 
@@ -238,7 +382,7 @@ class Org(Merit):
 
         # TODO: allow user to provide a list of statuses
         if merit_status and merit_status not in valid_statuses:
-            raise MeritStatusException(f"Merit Status ({merit_status}) is not valid.  Valid statuses are: ({valid_statuses})")
+            raise exceptions.MeritStatusException(f"Merit Status ({merit_status}) is not valid.  Valid statuses are: ({valid_statuses})")
 
         params = {"limit": limit,}
         if merit_status:

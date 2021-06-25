@@ -1,3 +1,4 @@
+import os
 import logging
 import datetime
 
@@ -20,7 +21,11 @@ class Merit:
     """
 
 
-    def __init__(self, app_id: str, app_secret: str, production: bool = True):
+    def __init__(self,
+        app_id: str = os.getenv("MERIT_APP_ID"),
+        app_secret: str = os.getenv("MERIT_APP_SECRET"),
+        production: bool = os.getenv("MERIT_PRODUCTION", "TRUE")=="TRUE"
+    ):
 
         self.app_id = app_id
         self.app_secret = app_secret

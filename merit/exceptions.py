@@ -4,3 +4,6 @@ class MeritStatusException(Exception):
 
 class SearchQueryException(Exception):
     """Search query must be longer than 3 characters."""
+
+class RequestedPermissionException(Exception):
+    """Requested Permission is not a valid option."""
