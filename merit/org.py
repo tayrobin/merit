@@ -193,7 +193,6 @@ class Org(Merit):
 
         if response.status_code == 200:
             data = response.json()
-            print(data)
             if "memberId" in data:
                 return data.get("memberId")
         logger.error(response.text)
@@ -234,6 +233,79 @@ class Org(Merit):
                 return data
         logger.error(response.text)
         return None
+
+
+    def get_member_merits(self, member_id: str, template_id: str = None, limit: int = 100) -> list:
+        """Get all Member merits by specifications.
+
+        :param member_id: the ID of the Member you wish to retreive
+        :type member_id: str
+        :param template_id: the ID of the MeritTemplate you wish to retreive
+        :type template_id: str, optional
+        :param limit: the number of results you wish to retreive
+        :type limit: int, optional
+
+        :return: a list of merits issued owned by the Member, filtered as specified
+        :rtype: list
+        """
+
+        # validate params
+        params = {}
+        if type(member_id) != str:
+            raise TypeError(f"member_id ({member_id}) must be a string.")
+        if type(limit) != int:
+            raise TypeError(f"limit ({limit}) must be an integer.")
+        params["limit"] = limit
+        if template_id:
+            if type(template_id) != str:
+                raise TypeError(f"template_id ({template_id}) must be a string.")
+            params["merittemplate_id"] = template_id
+
+        # init returned list
+        merit_list = []
+        next_page = True
+        while next_page:
+
+            # call api, parse response
+            response = self.get_api(f"/members/{member_id}/merits", params)
+            if response.status_code == 200:
+                data = response.json()
+            else:
+                logger.error(response.text)
+                return merit_list
+
+
+            # add merits into list
+            merit_list.extend(data.get("merits", []))
+
+            # stop at user provided limit
+            if len(merit_list) >= limit:
+                print(f"stopping at limit {len(merit_list)}")
+                return merit_list
+
+            # loop again if more pages
+            next_page = data.get("paging", {}).get("pageInfo", {}).get("hasNextPage", False)
+            params["starting_after"] = data.get("paging", {}).get("cursors", {}).get("after", "")
+
+        return merit_list
+
+
+    def member_has_active_merit(self, member_id: str, template_id: str) -> bool:
+        """Check whether Member has an active merit from the Template specified.
+
+        :param member_id: the ID of the Member you wish to check
+        :param template_id: the ID of the MeritTemplate you wish to check
+
+        :return: a boolean whether the Member passes the test
+        :rtype: bool
+        """
+
+        # look for first active merit
+        for merit in self.get_member_merits(member_id, template_id):
+            if merit.get("active") is True:
+                return True
+        return False
+
 
     def get_org_info(self) -> dict:
         """Get Merit information about Organization.
@@ -415,7 +487,7 @@ class Org(Merit):
                 return merit_list
 
             # loop again if more pages
-            next_page = data.get("pageInfo", {}).get("hasNextPage", False)
+            next_page = data.get("paging", {}).get("pageInfo", {}).get("hasNextPage", False)
             params["starting_after"] = data.get("paging", {}).get("cursors", {}).get("after", "")
 
         return merit_list
