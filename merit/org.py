@@ -387,6 +387,7 @@ class Org(Merit):
         choices = sorted(choices, key = lambda x: x[1])
         if include_none:
             choices.insert(0, (None, "-----"))
+        return choices
 
 
     def get_merit_template(self, template_id: str) -> dict:
